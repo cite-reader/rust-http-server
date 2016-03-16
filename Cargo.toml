@@ -1,0 +1,8 @@
+[package]
+name = "http-server"
+version = "0.1.0"
+authors = ["Alex Hill <alexander.d.hill.89@gmail.com>"]
+
+[dependencies]
+clap = "2.1.2"
+httparse = "1.1.1"
