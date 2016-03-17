@@ -12,7 +12,11 @@ pub type Result<T> = ::std::result::Result<T, Error>;
 pub enum Error {
     Parse(httparse::Error),
     Io(io::Error),
-    RequestLineTooLong
+    RequestLineTooLong,
+    PathNotInOriginForm,
+    IllegalPercentEncoding,
+    MethodNotAllowed,
+    PermissionDenied
 }
 
 impl From<httparse::Error> for Error {

@@ -12,6 +12,9 @@
 
 extern crate clap;
 extern crate httparse;
+#[macro_use]
+extern crate mime;
+extern crate mime_guess;
 
 mod server;
 mod errors;

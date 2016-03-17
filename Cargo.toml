@@ -1,8 +1,10 @@
 [package]
 name = "http-server"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["Alex Hill <alexander.d.hill.89@gmail.com>"]
 
 [dependencies]
 clap = "2.1.2"
 httparse = "1.1.1"
+mime_guess = "1.6.0"
+mime = "0.2.0"
