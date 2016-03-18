@@ -15,6 +15,7 @@ use std::io::{self, Read, Write, ErrorKind};
 use std::net::{TcpListener, TcpStream};
 use std::os::unix::ffi::OsStringExt;
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 
 /// Binds the given port and begins serving the given directory.
 ///
@@ -28,7 +29,11 @@ pub fn serve<P: AsRef<Path>>(port: u16, serve_path: P) -> Result<()> {
 
     for stream in listener.incoming() {
         let _ = match stream {
-            Ok(stream) => handle_client(stream, &serve_path),
+            Ok(stream) => {
+                try!(stream.set_read_timeout(Some(Duration::new(1, 0))));
+                try!(stream.set_write_timeout(Some(Duration::new(1, 0))));
+                handle_client(stream, &serve_path)
+            },
             Err(_) => Ok(()) // Ignore failed connections fobr now.
         };
     }
@@ -153,10 +158,10 @@ fn parse_path<R: Read>(mut stream: R, buffer: &mut [u8])
         let mut request = Request::new(&mut headers);
 
         read += try!(stream.read(&mut buffer[read ..]));
-        try!(request.parse(&buffer[.. read]));
+        let parse_result = try!(request.parse(&buffer[.. read]));
 
-        if let Some(path) = request.path {
-            return Ok((Vec::from(path.as_bytes()),
+        if parse_result.is_complete() {
+            return Ok((Vec::from(request.path.unwrap().as_bytes()),
                        Vec::from(request.method.unwrap())));
         }
     }
