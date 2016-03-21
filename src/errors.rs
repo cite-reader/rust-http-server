@@ -16,7 +16,8 @@ pub enum Error {
     PathNotInOriginForm,
     IllegalPercentEncoding,
     MethodNotAllowed,
-    PermissionDenied
+    PermissionDenied,
+    RequestIncomplete
 }
 
 impl From<httparse::Error> for Error {

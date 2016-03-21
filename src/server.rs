@@ -61,7 +61,8 @@ fn handle_client<P: AsRef<Path>>(mut stream: TcpStream, serve_path: P)
                 try!(stream.write(ERROR_400));
                 return Err(e);
             },
-            Err(e@Error::IllegalPercentEncoding) => {
+            Err(e@Error::IllegalPercentEncoding) |
+            Err(e@Error::RequestIncomplete) => {
                 try!(stream.write(ERROR_400));
                 return Err(e);
             },
@@ -157,7 +158,12 @@ fn parse_path<R: Read>(mut stream: R, buffer: &mut [u8])
 
         let mut request = Request::new(&mut headers);
 
-        read += try!(stream.read(&mut buffer[read ..]));
+        let read_this_cycle = try!(stream.read(&mut buffer[read ..]));
+        if read_this_cycle == 0 {
+            return Err(Error::RequestIncomplete);
+        }
+
+        read += read_this_cycle;
         let parse_result = try!(request.parse(&buffer[.. read]));
 
         if parse_result.is_complete() {
@@ -188,7 +194,7 @@ fn parse_basic() {
 
 #[test]
 fn parser_does_not_percent_decode() {
-    let request = b"GET /%20 HTTP/1.1\r\n";
+    let request = b"GET /%20 HTTP/1.1\r\n\r\n";
     let mut buffer = [0; 100];
 
     assert_eq!(parse_path(&request[..], &mut buffer).unwrap().0, b"/%20");
@@ -196,7 +202,7 @@ fn parser_does_not_percent_decode() {
 
 #[test]
 fn parser_does_not_fail_on_illegal_percent_encoding() {
-    let request = b"GET /bogus%zz HTTP/1.1\r\n";
+    let request = b"GET /bogus%zz HTTP/1.1\r\n\r\n";
     let mut buffer = [0; 100];
 
     assert!(parse_path(&request[..], &mut buffer).is_ok());
@@ -212,7 +218,7 @@ fn parser_fails_on_bad_bytes() {
 
 #[test]
 fn parser_gives_method() {
-    let request = b"GET / HTTP/1.1\r\n";
+    let request = b"GET / HTTP/1.1\r\n\r\n";
     let mut buffer = [0; 100];
 
     assert_eq!(parse_path(&request[..], &mut buffer).unwrap().1, b"GET");
