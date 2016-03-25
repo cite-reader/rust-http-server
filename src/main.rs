@@ -12,12 +12,13 @@
 
 extern crate clap;
 extern crate httparse;
-#[macro_use]
-extern crate mime;
+#[macro_use] extern crate mime;
 extern crate mime_guess;
+#[macro_use] extern crate nom;
 
-mod server;
 mod errors;
+mod fastcgi;
+mod server;
 
 use server::serve;
 
