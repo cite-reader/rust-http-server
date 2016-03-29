@@ -1,5 +1,6 @@
 //! Server functionality
 
+use config::Config;
 use errors::{Result, Error};
 
 use httparse::{self, Request};
@@ -14,7 +15,7 @@ use std::fs::{File, canonicalize};
 use std::io::{self, Read, Write, ErrorKind};
 use std::net::{TcpListener, TcpStream};
 use std::os::unix::ffi::OsStringExt;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::time::Duration;
 
 /// Binds the given port and begins serving the given directory.
@@ -23,18 +24,22 @@ use std::time::Duration;
 /// `~/.ssh`? Sure! Put those bytes on the Web.
 ///
 /// Fixing this is a project for post-`0.1`.
-pub fn serve<P: AsRef<Path>>(port: u16, serve_path: P) -> Result<()> {
-    let listener = try!(TcpListener::bind(("0.0.0.0", port)));
-    let serve_path = try!(canonicalize(serve_path));
+pub fn serve(mut config: Config) -> Result<()> {
+    let listener = try!(TcpListener::bind(("0.0.0.0", config.port)));
+    config.stat.webroot = try!(canonicalize(config.stat.webroot.clone()));
 
     for stream in listener.incoming() {
         let _ = match stream {
             Ok(stream) => {
                 try!(stream.set_read_timeout(Some(Duration::new(1, 0))));
                 try!(stream.set_write_timeout(Some(Duration::new(1, 0))));
-                handle_client(stream, &serve_path)
+                if let Err(e) = handle_client(stream, &config) {
+                    warn!("Failure handling a client: {:?}", e);
+                }
             },
-            Err(_) => Ok(()) // Ignore failed connections fobr now.
+            Err(e) => {
+                warn!("Failed connection: {}", e);
+            }
         };
     }
 
@@ -45,8 +50,7 @@ pub fn serve<P: AsRef<Path>>(port: u16, serve_path: P) -> Result<()> {
 ///
 /// This is a blocking operation; post `0.1` we’ll grow a thread pool or a `mio`
 /// reactor.
-fn handle_client<P: AsRef<Path>>(mut stream: TcpStream, serve_path: P)
-                                 -> Result<()> {
+fn handle_client(mut stream: TcpStream, config: &Config) -> Result<()> {
     // length is the suggested minimum from RFC 7230
     let mut buffer = [0u8; 8000];
     let (request_path, request_method) =
@@ -95,7 +99,7 @@ fn handle_client<P: AsRef<Path>>(mut stream: TcpStream, serve_path: P)
         }));
 
     let requested_file =
-        match canonicalize(serve_path.as_ref().join(normalized_path)) {
+        match canonicalize(config.stat.webroot.join(normalized_path)) {
             Ok(f) => f,
             Err(e) => {
                 match e.kind() {
@@ -107,7 +111,7 @@ fn handle_client<P: AsRef<Path>>(mut stream: TcpStream, serve_path: P)
             }
         };
 
-    if !requested_file.starts_with(serve_path) {
+    if !requested_file.starts_with(&config.stat.webroot) {
         try!(stream.write(ERROR_403));
         return Err(Error::PermissionDenied);
     }
@@ -148,7 +152,8 @@ fn handle_client<P: AsRef<Path>>(mut stream: TcpStream, serve_path: P)
 
 /// Parses a path out of a reader
 fn parse_path<R: Read>(mut stream: R, buffer: &mut [u8])
-                       -> Result<(Vec<u8>, Vec<u8>)> {
+                       -> Result<(Vec<u8>, Vec<u8>)>
+{
     let mut read = 0;
     let mut headers = [httparse::EMPTY_HEADER; 16];
     loop {
