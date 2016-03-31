@@ -7,9 +7,7 @@ use errors::{Result, Error};
 /// The following operations are performed:
 ///
 /// 1. Sequences of multiple `'/'` characters are collapsed into a single `'/'`.
-/// 2. Any leading `'/'` is stripped. (If the request path doesn’t lead with a
-///    slash, the path is ill-formed for our purposes and we return an `Err`).
-/// 3. Percent-encoded bytes are decoded. Bogus percent-encoding, like `b"%bo"`,
+/// 2. Percent-encoded bytes are decoded. Bogus percent-encoding, like `b"%bo"`,
 ///    will return `Err`.
 pub fn normalize_path(path: &[u8]) -> Result<Vec<u8>> {
     let mut buffer = Vec::with_capacity(path.len() - 1);
@@ -25,6 +23,7 @@ pub fn normalize_path(path: &[u8]) -> Result<Vec<u8>> {
     while i < path.len() && path[i] == 0x2F {
         i += 1;
     }
+    buffer.push(b'/');
 
     while i < path.len() {
         match path[i] {

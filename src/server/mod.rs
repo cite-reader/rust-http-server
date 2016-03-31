@@ -1,10 +1,12 @@
 //! Server functionality
 
 mod static_files;
+mod router;
 
 use config::Config;
 use errors::{Result, Error};
 use filesystem::normalize_path;
+use server::router::Router;
 use server::static_files::Statics;
 
 use httparse;
@@ -15,7 +17,7 @@ use std::collections::HashMap;
 use std::collections::hash_map::{self, Entry};
 use std::ffi::OsStr;
 use std::fs::canonicalize;
-use std::io::{self, Read, BufRead, BufReader, Write, BufWriter, ErrorKind};
+use std::io::{self, Read, BufRead, BufReader, Write, BufWriter};
 use std::marker::PhantomData;
 use std::mem;
 use std::net::{TcpListener, TcpStream};
@@ -30,9 +32,12 @@ use std::time::Duration;
 /// Fixing this is a project for post-`0.1`.
 pub fn serve(mut config: Config) -> Result<()> {
     let listener = try!(TcpListener::bind(("0.0.0.0", config.port)));
-    config.stat.webroot = try!(canonicalize(config.stat.webroot.clone()));
+    config.stat.webroot = try!(canonicalize(config.stat.webroot));
 
-    let handler = Statics::new(config);
+    let mut router = Router::new();
+
+    router.route(config.stat.public_prefix.clone(), String::from("GET"),
+                 Statics::new(config.clone()));
 
     for stream in listener.incoming() {
         let _ = match stream {
@@ -40,8 +45,12 @@ pub fn serve(mut config: Config) -> Result<()> {
                 try!(stream.set_read_timeout(Some(Duration::new(5, 0))));
                 try!(stream.set_write_timeout(Some(Duration::new(5, 0))));
 
-                let (req, res) = try!(make_request_pair(stream));
-                handler.serve(req, res);
+                match make_request_pair(try!(stream.try_clone())) {
+                    Ok((req, res)) => router.serve(req, res),
+                    Err(Error::Parse(_)) =>
+                        try!(error_messages::error_400(Response::new(stream))),
+                    Err(e) => warn!("{:?}", e)
+                }
             },
             Err(e) => {
                 warn!("Failed connection: {}", e);
@@ -57,16 +66,7 @@ fn make_request_pair(stream: TcpStream) -> Result<(Request, Response<Fresh>)>
     let response_inner = try!(stream.try_clone());
     let request_inner = stream;
 
-    let response = Response {
-        writer: BufWriter::new(response_inner),
-        buffer: Vec::new(),
-        status: ResponseStatus {
-            code: 200,
-            reason: String::from("Ok")
-        },
-        headers: Headers::new(),
-        _status: PhantomData
-    };
+    let response = Response::new(response_inner);
 
     let request = Request {
         inner: try!(InnerRequest::parse(request_inner))
@@ -198,6 +198,10 @@ fn parse_request_fails_on_bad_bytes() {
 impl Request {
     pub fn request_uri(&self) -> &OsStr {
         OsStr::from_bytes(self.inner.path.as_slice())
+    }
+
+    pub fn method(&self) -> &str {
+        &self.inner.method
     }
 }
 
@@ -349,6 +353,19 @@ impl<Status> Response<Status> {
 }
 */
 impl Response<Fresh> {
+    pub fn new(stream: TcpStream) -> Self {
+        Response {
+            writer: BufWriter::new(stream),
+            buffer: Vec::new(),
+            status: ResponseStatus {
+                code: 200,
+                reason: String::from("Ok")
+            },
+            headers: Headers::new(),
+            _status: PhantomData
+        }
+    }
+
     pub fn of_stream<R: Read>(mut self, mut stream: R) -> io::Result<()> {
         try!(self.write_headers());
         io::copy(&mut stream, &mut self.writer).map(|_| ())
@@ -511,19 +528,6 @@ pub mod error_messages {
 
     const ERROR_500: &'static [u8] = b"<!doctype html><html><head><title>Error</title></head><body><h1>Internal Error</h1><p>Something went wrong on my side.</p><p>There's nothing you can do; maybe come back later.</p></body></html>";
 
-    pub fn error_414(mut res: Response<Fresh>) -> io::Result<()> {
-        res.set_status(414, String::from("URI Too Long"));
-        {
-            let headers = res.headers_mut();
-            headers.insert("Content-Type", Vec::from(&b"text/html"[..]));
-            headers.insert("Content-Length", Vec::from(&b"169"[..]));
-        }
-
-        res.of_stream(ERROR_414)
-    }
-
-    const ERROR_414: &'static [u8] = b"<!doctype html><html><head><title>Error</title></head><body><h1>URI Too Long</h1><p>Your user-agent produced a URI too long for this server; tell it to chill out.</p></body></html>";
-
     pub fn error_405(mut res: Response<Fresh>) -> io::Result<()> {
         res.set_status(405, String::from("Method not allowed"));
         {
@@ -561,7 +565,7 @@ pub mod error_messages {
         res.of_stream(ERROR_403)
     }
 
-    const ERROR_403: &'static [u8] = b"<!doctype html><html><head><title>Error</titlpe></head><body><h1>Forbidden</h1><p>You don't have permission to view that file. Sorry.</p></body></html>";
+    const ERROR_403: &'static [u8] = b"<!doctype html><html><head><title>Error</title></head><body><h1>Forbidden</h1><p>You don't have permission to view that file. Sorry.</p></body></html>";
 
     pub fn error_400(mut res: Response<Fresh>) -> io::Result<()> {
         res.set_status(400, String::from("Bad Request"));

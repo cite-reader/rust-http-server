@@ -7,8 +7,10 @@ use errors::*;
 
 use mime_guess::guess_mime_type_opt;
 
+use std::ffi::OsStr;
 use std::fs::{File, canonicalize};
 use std::io::ErrorKind;
+use std::os::unix::ffi::OsStrExt;
 
 /// A handler for static files
 pub struct Statics {
@@ -21,8 +23,13 @@ impl Statics {
     }
 
     fn serve_file(&self, req: Request, mut res: Response<Fresh>) -> Result<()> {
+        let request_uri_relative = OsStr::from_bytes(
+            &req.request_uri().as_bytes()[1..]
+        );
+
         let requested_file =
-            match canonicalize(self.conf.stat.webroot.join(req.request_uri())) {
+            match canonicalize(self.conf.stat.webroot
+                               .join(request_uri_relative)) {
                 Ok(f) => f,
                 Err(e) => {
                     match e.kind() {
@@ -35,11 +42,11 @@ impl Statics {
             };
 
         if !requested_file.starts_with(&self.conf.stat.webroot) {
-            error_403(res);
+            let _ = error_403(res);
             return Err(Error::PermissionDenied);
         }
 
-        let mut file = match File::open(&requested_file) {
+        let file = match File::open(&requested_file) {
             Ok(f) => f,
             Err(e) => {
                 match e.kind() {
@@ -54,10 +61,15 @@ impl Statics {
         let meta = match file.metadata() {
             Ok(m) => m,
             Err(e) => {
-                let _ = error_500(res);
+                try!(error_500(res));
                 return Err(Error::from(e));
             }
         };
+
+        if meta.is_dir() {
+            try!(error_403(res));
+            return Err(Error::PermissionDenied);
+        }
 
         let mime = guess_mime_type_opt(&requested_file)
             .map(mime_as_string)
@@ -74,7 +86,7 @@ impl Statics {
 impl Handler for Statics {
     fn serve(&self, req: Request, res: Response<Fresh>) {
         match self.serve_file(req, res) {
-            Ok(_) => info!("Served a file"),
+            Ok(_) => (),
             Err(e) => warn!("Error serving a file: {:?}", e)
         }
     }

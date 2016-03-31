@@ -50,13 +50,21 @@ use server::serve;
 
 use clap::{Arg, App};
 
+use std::env;
 use std::ffi::OsStr;
 use std::io::{stderr, Write};
 use std::os::unix::ffi::OsStrExt;
 use std::process::exit;
 
 fn main() {
-    match env_logger::init() {
+    let mut log_builder = env_logger::LogBuilder::new();
+    log_builder.filter(None, log::LogLevelFilter::Info);
+
+    if let Ok(var) = env::var("RUST_LOG") {
+        log_builder.parse(&var);
+    }
+
+    match log_builder.init() {
         Ok(()) => (),
         Err(e) => {
             writeln!(stderr(),

@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 mod parser;
 
 #[derive(Debug, PartialEq, Eq, Clone)]
