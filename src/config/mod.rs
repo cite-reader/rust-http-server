@@ -4,7 +4,7 @@ use std::net::{SocketAddr, IpAddr, Ipv4Addr};
 use std::path::PathBuf;
 
 /// A holder for app configuration
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Config {
     /// Port number to listen on
     pub port: u16,
@@ -22,7 +22,7 @@ impl Default for Config {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct StaticFilesConfig {
     /// Where the files are located on disk
     pub webroot: PathBuf,
@@ -39,7 +39,7 @@ impl Default for StaticFilesConfig {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct FastCgiConfig {
     /// Socket addresses suitable for passing to `TcpStream::connect`.
     pub address: SocketAddr

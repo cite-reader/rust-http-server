@@ -42,6 +42,7 @@ extern crate toml;
 mod config;
 mod errors;
 mod fastcgi;
+mod filesystem;
 mod server;
 
 use config::parser::{self, parse_file};
