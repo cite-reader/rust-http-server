@@ -30,6 +30,7 @@
 //!
 //! [toml]: https://github.com/toml-lang/toml
 
+extern crate byteorder;
 extern crate clap;
 extern crate env_logger;
 extern crate httparse;
@@ -39,10 +40,12 @@ extern crate mime_guess;
 #[macro_use] extern crate nom;
 extern crate toml;
 
+mod cgi;
 mod config;
 mod errors;
 mod fastcgi;
 mod filesystem;
+mod log_util;
 mod server;
 
 use config::parser::{self, parse_file};
@@ -60,7 +63,7 @@ fn main() {
     let mut log_builder = env_logger::LogBuilder::new();
     log_builder.filter(None, log::LogLevelFilter::Info);
 
-    if let Ok(var) = env::var("RUST_LOG") {
+    if let Ok(var) = env::var("SERVER_LOG") {
         log_builder.parse(&var);
     }
 
@@ -113,5 +116,7 @@ fn main() {
     };
 
     log!(log::LogLevel::Info, "Starting server on port {}", config.port);
-    serve(config).unwrap();
+    if let Err(_) = serve(config) {
+        exit(1);
+    }
 }

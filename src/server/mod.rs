@@ -5,23 +5,26 @@ mod router;
 
 use config::Config;
 use errors::{Result, Error};
+use fastcgi::driver as fcgi_driver;
 use filesystem::normalize_path;
 use server::router::Router;
 use server::static_files::Statics;
 
 use httparse;
 use mime::Mime;
+use log::LogLevel;
 
 use std::ascii::AsciiExt;
 use std::collections::HashMap;
 use std::collections::hash_map::{self, Entry};
 use std::ffi::OsStr;
 use std::fs::canonicalize;
-use std::io::{self, Read, BufRead, BufReader, Write, BufWriter};
+use std::io::{self, Read, BufRead, BufReader, Write, BufWriter, ErrorKind};
 use std::marker::PhantomData;
 use std::mem;
-use std::net::{TcpListener, TcpStream};
+use std::net::{TcpListener, TcpStream, SocketAddr};
 use std::os::unix::ffi::OsStrExt;
+use std::path::PathBuf;
 use std::time::Duration;
 
 /// Binds the given port and begins serving the given directory.
@@ -36,8 +39,24 @@ pub fn serve(mut config: Config) -> Result<()> {
 
     let mut router = Router::new();
 
+    let fcgi_conn = match fcgi_driver::Connection::establish("127.0.0.1:9000",
+                                                             &config) {
+        Ok(c) => c,
+        Err(Error::Io(e)) => {
+            match e.kind() {
+                ErrorKind::ConnectionRefused =>
+                    log!(LogLevel::Error, "FastCGI responder not responding"),
+                _ => log!(LogLevel::Error, "{:?}", e)
+            }
+
+            return Err(Error::Io(e));
+        },
+        Err(e) => return Err(e)
+    };
+
     router.route(config.stat.public_prefix.clone(), String::from("GET"),
                  Statics::new(config.clone()));
+    router.route_any(PathBuf::from("/"), fcgi_conn);
 
     for stream in listener.incoming() {
         let _ = match stream {
@@ -63,13 +82,17 @@ pub fn serve(mut config: Config) -> Result<()> {
 
 fn make_request_pair(stream: TcpStream) -> Result<(Request, Response<Fresh>)>
 {
+    let peer_addr = try!(stream.peer_addr());
+    let local_port = try!(stream.local_addr()).port();
     let response_inner = try!(stream.try_clone());
     let request_inner = stream;
 
     let response = Response::new(response_inner);
 
     let request = Request {
-        inner: try!(InnerRequest::parse(request_inner))
+        inner: try!(InnerRequest::parse(request_inner)),
+        remote_addr: peer_addr,
+        local_port: local_port
     };
 
     Ok((request, response))
@@ -89,7 +112,9 @@ impl<F> Handler for F where F: Fn(Request, Response<Fresh>) {
 /// An incoming request from the client
 #[derive(Debug)]
 pub struct Request {
-    inner: InnerRequest<TcpStream>
+    inner: InnerRequest<TcpStream>,
+    pub remote_addr: SocketAddr,
+    pub local_port: u16
 }
 
 /// Internal, generic version of a Request
@@ -127,9 +152,9 @@ impl<R: Read> InnerRequest<R> {
 }
 
 fn parse_inner<R: BufRead>(mut source: R) -> Result<(usize,
-                                                      String,
-                                                      String,
-                                                      Headers)>
+                                                     String,
+                                                     String,
+                                                     Headers)>
 {
     let mut headers = [httparse::EMPTY_HEADER; 100];
     let mut last_buffer_len = 0;
@@ -200,8 +225,14 @@ impl Request {
         OsStr::from_bytes(self.inner.path.as_slice())
     }
 
+    #[inline]
     pub fn method(&self) -> &str {
         &self.inner.method
+    }
+
+    #[inline]
+    pub fn headers(&self) -> &Headers {
+        &self.inner.headers
     }
 }
 
@@ -247,7 +278,7 @@ pub enum Fresh {}
 pub enum Streaming {}
 
 struct ResponseStatus {
-    code: u32,
+    code: u16,
     reason: String
 }
 
@@ -318,6 +349,10 @@ impl Headers {
             }
         }
     }
+
+    pub fn get(&self, key: &str) -> Option<&Vec<u8>> {
+        self.map.get(&normalize_header_name(key))
+    }
 }
 
 impl IntoIterator for Headers {
@@ -376,7 +411,7 @@ impl Response<Fresh> {
         &mut self.headers
     }
 
-    pub fn set_status(&mut self, code: u32, reason: String) {
+    pub fn set_status(&mut self, code: u16, reason: String) {
         self.status = ResponseStatus {
             code: code,
             reason: reason

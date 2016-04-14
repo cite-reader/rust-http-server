@@ -1,11 +1,20 @@
 #![allow(dead_code)]
 
-mod parser;
+pub mod driver;
+pub mod parser;
+mod serializer;
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Record {
     pub id: u16,
     pub content: Content
+}
+
+impl Record {
+    #[inline]
+    pub fn kind(&self) -> u8 {
+        self.content.kind()
+    }
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -21,6 +30,24 @@ pub enum Content {
     Stderr(Vec<u8>),
     AbortRequest(AbortRequest),
     EndRequest(EndRequest)
+}
+
+impl Content {
+    pub fn kind(&self) -> u8 {
+        match *self {
+            Content::GetValues(_) => record_kind::GET_VALUES,
+            Content::GetValuesResult(_) => record_kind::GET_VALUES_RESULT,
+            Content::UnknownType(_) => record_kind::UNKNOWN_TYPE,
+            Content::BeginRequest(_) => record_kind::BEGIN_REQUEST,
+            Content::Params(_) => record_kind::PARAMS,
+            Content::Stdin(_) => record_kind::STDIN,
+            Content::Data(_) => record_kind::DATA,
+            Content::Stdout(_) => record_kind::STDOUT,
+            Content::Stderr(_) => record_kind::STDERR,
+            Content::AbortRequest(_) => record_kind::ABORT_REQUEST,
+            Content::EndRequest(_) => record_kind::END_REQUEST
+        }
+    }
 }
 
 pub type Params = Vec<NameValuePair>;
@@ -60,6 +87,17 @@ pub enum Role {
     Filter
 }
 
+impl Role {
+    /// Returns the protocol's number for this role
+    pub fn to_protocol_number(self) -> u16 {
+        match self {
+            Role::Responder => 1,
+            Role::Authorizer => 2,
+            Role::Filter => 3
+        }
+    }
+}
+
 pub mod flags {
     pub const KEEP_CONN: u8 = 1;
 }
@@ -83,4 +121,10 @@ pub mod protocol_status {
     pub const CANT_MPX_CONN: u8 = 1;
     pub const OVERLOADED: u8 = 2;
     pub const UNKNOWN_ROLE: u8 = 3;
+}
+
+pub mod management_records {
+    pub const MAX_CONNS: &'static [u8] = b"FCGI_MAX_CONNS";
+    pub const MAX_REQS: &'static [u8] = b"FCGI_MAX_REQS";
+    pub const MPXS_CONNS: &'static [u8] = b"FCGI_MPXS_CONNS";
 }

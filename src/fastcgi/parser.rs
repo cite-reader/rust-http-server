@@ -5,29 +5,30 @@ use super::*;
 use nom::*;
 
 pub fn record(input: &[u8]) -> IResult<&[u8], Record> {
-    let (in1, _) = try_parse!(input, be_u8); // protocol version
+    let (in1, _version) = try_parse!(input, be_u8);
     let (in2, kind) = try_parse!(in1, be_u8);
     let (in3, id) = try_parse!(in2, be_u16);
     let (in4, content_length) = try_parse!(in3, be_u16);
     let (in5, padding_length) = try_parse!(in4, be_u8);
-    let (in6, _) = try_parse!(in5, take!(1)); // reserved byte
+    let (in6, _reserved) = try_parse!(in5, take!(1));
     let (in7, content) = try_parse!(in6, take!(content_length));
-    let (in8, _) = try_parse!(in7, take!(padding_length));
+    let (in8, _padding) = try_parse!(in7, take!(padding_length));
 
-    let (_, parsed_content) = match kind {
+    let (_unparsed_content, parsed_content) = match kind {
         record_kind::BEGIN_REQUEST => try_parse!(content, begin_request),
         record_kind::ABORT_REQUEST => try_parse!(content, abort_request),
         record_kind::END_REQUEST => try_parse!(content, end_request),
         record_kind::PARAMS => try_parse!(content, params),
-        record_kind::STDIN => (content, Content::Stdin(Vec::from(content))),
-        record_kind::STDOUT => (content, Content::Stdout(Vec::from(content))),
-        record_kind::STDERR => (content, Content::Stderr(Vec::from(content))),
-        record_kind::DATA => (content, Content::Data(Vec::from(content))),
+        record_kind::STDIN => (&[][..], Content::Stdin(Vec::from(content))),
+        record_kind::STDOUT => (&[][..], Content::Stdout(Vec::from(content))),
+        record_kind::STDERR => (&[][..], Content::Stderr(Vec::from(content))),
+        record_kind::DATA => (&[][..], Content::Data(Vec::from(content))),
         record_kind::GET_VALUES => try_parse!(content, get_values),
+        record_kind::GET_VALUES_RESULT => try_parse!(content, get_values_result),
         record_kind::UNKNOWN_TYPE => try_parse!(content, unknown_type),
         _ => return IResult::Error(Err::Position(
             ErrorKind::Custom(ParseError::UnknownType(kind).to_u32()),
-            in8
+            in1
         ))
     };
 

@@ -4,6 +4,7 @@ version = "0.2.0"
 authors = ["Alex Hill <alexander.d.hill.89@gmail.com>"]
 
 [dependencies]
+byteorder = "0.5.1"
 clap = "2.1.2"
 httparse = "1.1.1"
 mime_guess = "1.6.0"
