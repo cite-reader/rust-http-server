@@ -50,7 +50,7 @@ pub fn get_values<W: Write>(mut output: W, get_for: &[&[u8]]) -> Result<()>
                                            content_length));
 
     for &name in get_for {
-        try!(write_name_val_pair(&mut output, name, &vec![]));
+        try!(write_name_val_pair(&mut output, name, &[]));
     }
 
     try!(output.write_all(&vec![0; padding_length as usize]));
@@ -68,9 +68,7 @@ fn name_length(val: &[u8]) -> usize {
 }
 
 /// Writes a name-value pair to the stream
-fn write_name_val_pair<W: Write>(mut output: W, name: &[u8], val: &[u8])
-                                 -> Result<()>
-{
+fn write_name_val_pair<W: Write>(mut output: W, name: &[u8], val: &[u8]) -> Result<()> {
     let name_length = name.len();
     let val_length = val.len();
 
@@ -142,7 +140,7 @@ pub fn params<W: Write>(mut output: W, id: u16, params: &[(&[u8], &[u8])])
     Ok(())
 }
 
-/// Write a frame of a FCGI_STDIN stream
+/// Write a frame of a `FCGI_STDIN` stream
 pub fn stdin<W: Write>(mut output: W, id: u16, content: &[u8]) -> Result<()> {
     let padding_length = try!(write_header(&mut output, record_kind::STDIN,
                                            id, content.len()));

@@ -95,15 +95,15 @@ impl Connection {
                 last_buffer_length = read_buffer.len();
                 
                 match record(read_buffer) {
-                    IResult::Done(_, Record{id, content: _})
+                    IResult::Done(_, Record{id, ..})
                         if id as usize != request_number => {
                             warn!("Found a message for request {}; this is request {}", id, request_number);
                             return Err(Error::FastCgiProtocolViolation);
                         },
                     IResult::Done(rest,
                                   Record{
-                                      id: _,
-                                      content: Content::Stdout(content)})
+                                      content: Content::Stdout(content),
+                                      ..})
                         =>{
                             buffer.write_all(&content[..]).unwrap();
 
@@ -141,8 +141,8 @@ impl Connection {
                         read_buffer.len() - rest.len()
                     },
                     IResult::Done(rest, Record{
-                        id: _,
-                        content: Content::Stderr(content)
+                        content: Content::Stderr(content),
+                        ..
                     }) => {
                         warn!("Error message from responder: \"{}\"",
                               ascii_escape(&content[..]));
@@ -255,8 +255,7 @@ impl Connection {
 
         let query_string = req.request_uri().as_bytes().iter()
             .position(|&b| b == b'?')
-            .map(|i| req.request_uri().as_bytes().split_at(i).1)
-            .unwrap_or(&b""[..]);
+            .map_or(&b""[..], |i| req.request_uri().as_bytes().split_at(i).1);
         metavars.push((&b"QUERY_STRING"[..], query_string));
 
         metavars.push((&b"REMOTE_ADDR"[..], remote_addr.as_bytes()));
@@ -264,14 +263,13 @@ impl Connection {
         metavars.push((&b"REQUEST_METHOD"[..], req.method().as_bytes()));
         metavars.push((&b"SCRIPT_NAME"[..], &b""[..]));
         metavars.push((&b"SERVER_NAME"[..],
-                       req.headers().get("Host").map(Vec::as_slice)
-                       .unwrap_or(&b""[..])));
+                       req.headers().get("Host").map_or(&b""[..], Vec::as_slice)));
         metavars.push((&b"SERVER_PORT"[..], local_port_str.as_bytes()));
         metavars.push((&b"SERVER_PROTOCOL"[..], &b"HTTP/1.1"[..]));
         metavars.push((&b"SERVER_SOFTWARE"[..],
                        &b"toy http-server 0.2 (hella unstable)"[..]));
 
-        for &(ref name, value) in headers.iter() {
+        for &(ref name, value) in &headers {
             metavars.push((name.as_bytes(), value));
         }
 

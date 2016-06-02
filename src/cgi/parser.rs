@@ -129,7 +129,7 @@ fn double_newline(input: &[u8]) -> IResult<&[u8], ()> {
         return IResult::Done(&input[4 ..], ());
     }
 
-    return IResult::Error(Err::Position(ErrorKind::CrLf, input));
+    IResult::Error(Err::Position(ErrorKind::CrLf, input))
 }
 
 #[test]

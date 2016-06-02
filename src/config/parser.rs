@@ -110,7 +110,7 @@ impl From<io::Error> for Error {
     }
 }
 
-/// An owned, rendered version of a ParserError
+/// An owned, rendered version of a `ParserError`
 #[derive(Debug, Clone)]
 pub struct ErrorMessage {
     pub desc: String,

@@ -59,7 +59,7 @@ pub fn serve(mut config: Config) -> Result<()> {
     router.route_any(PathBuf::from("/"), fcgi_conn);
 
     for stream in listener.incoming() {
-        let _ = match stream {
+        match stream {
             Ok(stream) => {
                 try!(stream.set_read_timeout(Some(Duration::new(5, 0))));
                 try!(stream.set_write_timeout(Some(Duration::new(5, 0))));
