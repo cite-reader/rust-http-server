@@ -1,0 +1,7 @@
+= HTTP Server =
+Alex Hill <alexander.d.hill.89@gmail.com>
+
+A toy HTTP server, for exposure to lots of Rust.
+Features include serving static files and proxying FastCGI applications.
+
+Please, don't actually use this for anything, it's terrible.
